@@ -1,0 +1,352 @@
+---
+title: "Sales data analysis"
+author: "Abhinav Malasi"
+date: "11/12/2021"
+output: html_document
+---
+
+# Objective 
+
+Analyze the monthly sales data for an year and identify:
+
+1. The month with most sales
+2. The best selling product - overall and monthly
+3. Time (month of the year, day of the week, hour of the day) when sales peaked and the corresponding products
+4. Low sales products
+5. State that contributed to the maximum revenue
+6. Contributions of the different cities
+7. Number of unique invoices
+
+
+
+# Approach
+
+1. Load the CSV files
+2. Concatenate the files
+3. Data augmentation
+4. Dealing with missing values
+5. EDA
+
+
+## Loading the necessary packages
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+library(DT)
+library(qdapRegex)
+```
+
+## Loading the files
+
+
+```{r}
+file_path <- "C:/Users/amalasi/Documents/R/data_analysis/projects/sales_analytics/data"
+
+#temp = list.files(path = file_path, pattern="*.csv")
+temp = dir(path = file_path, pattern="*.csv")
+
+temp
+```
+
+## Reading the files 
+
+Order ID type was not consistent among the different files, so col_types usd to force all the columns to character type.
+
+
+```{r}
+
+load_data <- function(path) { 
+  files <- dir(path, pattern = '\\.csv', full.names = TRUE)
+  #tables <- lapply(files, read.csv)
+  #do.call(rbind, tables)
+  
+  files %>%
+    map_df(~read_csv(., col_types = list(col_integer(),col_character(),col_integer(),col_double(),col_character(),                                                           col_character())))
+}
+
+sales <- load_data("data")
+```
+
+
+
+## Dealing with missing values
+
+For now the missing values are removed. But ideally, the person responsible for generating the data should be contacted to make sure if it is some error or the data can be removed. 
+
+```{r}
+sales_NA <- sales %>% filter(is.na(sales))
+
+sales <- sales %>% filter(!is.na(sales))
+```
+
+
+## Extracting date and time information
+
+Split the string into date and time.
+Convert the list to a data frame.
+
+```{r}
+aa <- sales$`Order Date` %>% str_split(" ",n=2)
+
+bb = do.call(rbind.data.frame, aa)
+colnames(bb) <- c("date","time")
+
+sales_new <- cbind(sales,bb)
+```
+
+Convert to date format
+
+```{r}
+sales_new$date <- sales_new$date %>% as.Date("%m/%d/%y")
+
+sales_new$month <- month(sales_new$date, label=TRUE,abbr = TRUE)
+
+sales_new$day <- day(sales_new$date)
+```
+
+Convert to proper time format
+
+```{r}
+sales_new$time <- sales_new$time %>% hm()
+```
+
+
+## Monthly sales made
+
+```{r}
+sales_monthly <- sales_new %>% group_by(month) %>% summarise(revenue = sum(`Price Each`*`Quantity Ordered`)) 
+
+avg_sales_per_month <- sum(sales_monthly$revenue)/12
+
+```
+
+
+```{r}
+sales_monthly %>% 
+  #mutate(month=factor(month.abb[month],levels=month.abb)) %>%
+  ggplot(aes(month, revenue/1e6)) +
+  geom_point(size=3, shape=21, stroke=2) + 
+  xlab("Months") + ylab("Total revenue (in million), $") + 
+ # scale_x_d(breaks=seq(1,12,1)) +
+  scale_y_continuous(limits = c(0,5)) +
+  geom_hline(yintercept=avg_sales_per_month/1e6, linetype="dashed", color = "red", size=2) +
+  annotate("text", x=10.7, y=2.7, label= paste0("Monthly average $ ",round(avg_sales_per_month/1e6,2),"millions"),size=3) +
+  labs(title = "Monthly sales data", 
+       subtitle="The sales peaked during the festive seasons, with highest sales recorded in the \nmonth of December. The average monthly sales were $ 2.87 millions.") + 
+  theme_minimal()
+```
+
+A pattern of sales revenue aligns with the holiday season (Halloween, Christmas, Easter?).
+
+### Sales made on which days of the month
+
+```{r}
+sales_day <- sales_new %>% group_by(day) %>% summarise(revenue = sum(`Price Each`*`Quantity Ordered`)) 
+
+```
+
+```{r}
+sales_day %>% ggplot(aes(day, revenue/1e6)) +
+  geom_point(size=3, shape=21, stroke=2)+
+  geom_line(size=1.5)+
+  xlab("Days") + ylab("Total revenue (in million), $") + 
+  scale_x_continuous(breaks=seq(0,31,5)) +
+  scale_y_continuous(limits = c(0,1.2)) +
+  labs(title = "Daily sales data", 
+       subtitle="The total revenue generated during the days of the month on an avergae remains \nsteady. The sales start to plummet at the end of the month probably due to cash \nshortage.") +
+  theme_minimal()
+```
+
+Let us know check the frequency of orders.
+
+```{r}
+sales_daily_freq <- sales_new %>% group_by(month) %>% summarise(frequency = length(unique(`Order ID`)))
+```
+
+```{r}
+sales_daily_freq %>% ggplot(aes(month,frequency))+
+  geom_point(size=3, shape=21, stroke=2) +
+  xlab("Months") + ylab("Total unique orders") +
+  scale_y_continuous(limits = c(0,25000)) +
+  theme_minimal()
+```
+
+### Day of the week when sales were made
+
+```{r}
+sales_new %>% mutate(week_day = wday(date, label = TRUE)) %>% 
+  group_by(week_day) %>% summarise(frequency = length(unique(`Order ID`))) %>% ggplot(aes(week_day,frequency)) +
+  geom_point(size=3, shape=21, stroke=2)+
+  xlab("Days of the week") + ylab("Total unique orders") +
+  scale_y_continuous(limits = c(0,26500)) +
+  theme_minimal(base_size = 12)
+```
+
+
+### Time of the day when sales were made
+
+```{r}
+sales_new %>% ggplot(aes(hour(hms(time)))) +
+  geom_histogram(stat = "count",fill="NA",colour = "firebrick") +
+  labs(x = "Hour of the Day", y = "Total orders") +
+  theme_minimal(base_size = 12)
+```
+This can help us tell the time for sales and promotions to increase the sales.
+
+### Adjusting time zone to PST
+
+
+```{r}
+# city = sales_new %>% 
+#   mutate(city = str_split_fixed(ex_city_state(`Purchase Address`),",",n=2)[,1]) %>% select(city)
+# 
+# # sales_time_adjust <- sales_new %>% mutate(time_adj = if(city %in% c("NeW York City","Boston","Atlanta","Portland")){time-3}else if(city %in% c("Dallas","Austin")){time-2}else{time})
+# 
+# sales_time_adjust <- sales_new %>% 
+#   mutate(time_adj = case_when(
+#     city %in% c("NeW York City","Boston","Atlanta","Portland") ~ hm(time)-hm("3:0"),
+#     city %in% c("Dallas","Austin") ~ difftime(time,hm("2:0")),
+#     TRUE ~ time
+#   ))
+```
+
+
+## Best selling product
+
+```{r}
+sales_product <- sales_new %>% 
+  group_by(Product) %>% 
+  summarise(revenue = sum(`Price Each`*`Quantity Ordered`)) %>% 
+  arrange(desc(revenue)) %>% mutate(percent = round(revenue*100/sum(revenue),2))
+
+datatable(sales_product)
+```
+
+### Individual quantity of products
+
+```{r}
+quantity_product <- sales_new %>% 
+  group_by(Product) %>% 
+  summarise(quantity = sum(`Quantity Ordered`)) %>% 
+  arrange(desc(quantity))
+
+datatable(quantity_product)
+```
+
+
+
+There are 19 unique products for sale. The best seller is Macbook Pro Laptop.
+
+### Monthly best seller
+
+```{r}
+sales_product_monthly <- sales_new %>%
+  group_by(month,Product) %>% 
+  summarise(revenue = sum(`Price Each`*`Quantity Ordered`)) %>% 
+  arrange(desc(revenue)) %>% filter(revenue == max(revenue)) 
+
+datatable(sales_product_monthly)
+```
+
+Each month Macbook Pro laptop was the best seller.
+
+## Unique invoices
+
+```{r}
+sales_invoices <- sales_new %>%
+  group_by(month) %>% 
+  summarise(n_invoices = length(unique(`Order ID`))) %>% 
+  arrange()  
+
+datatable(sales_invoices)
+```
+
+## Calculating state statistics
+
+```{r}
+# state = state.abb
+# 
+# total = vector()
+# unique = vector()
+# 
+# for (i in 1:length(state)) {
+#   total[i] = length((grep(state[i],sales_new$`Purchase Address`, value = TRUE)))
+#   unique[i] = length(unique(grep(state[i],sales_new$`Purchase Address`, value = TRUE)))
+# }
+# 
+# sales_state = data.frame(state,total,unique)
+
+```
+
+```{r}
+# # only keeping the non-zero values
+# 
+# sales_state <- sales_state %>% filter(unique != 0) %>% arrange(desc(total))
+# 
+# datatable(sales_state)
+```
+
+```{r}
+sales_state_city <- sales_new %>% 
+  mutate(state = str_split_fixed(ex_city_state(`Purchase Address`),",",n=2)[,2],
+         city = str_split_fixed(ex_city_state(`Purchase Address`),",",n=2)[,1],
+         revenue = `Quantity Ordered`*`Price Each`) %>%
+  select(-c(2:10))
+  
+```
+
+```{r}
+sales_state <- sales_state_city %>% group_by(state) %>% 
+  summarise(total = length(`Order ID`), unique = length(unique(`Order ID`)), revenue=sum(revenue))%>% 
+  arrange(desc(revenue))
+
+datatable(sales_state)
+```
+
+```{r}
+sales_city <- sales_state_city %>% group_by(city) %>% 
+  summarise(total = length(`Order ID`), unique = length(unique(`Order ID`)), revenue = sum(revenue))%>% 
+  arrange(desc(revenue))
+
+datatable(sales_city)
+```
+## Products sold together
+
+```{r}
+buying_pattern <- inner_join(sales_new, sales_new, by = 'Order ID') %>%
+  filter(Product.x < Product.y) %>%
+  count(Product.x, Product.y) %>% 
+  arrange(desc(n))
+
+datatable(buying_pattern)
+```
+
+## MoM revenue changes
+
+```{r}
+sales_MoM <- sales_new %>% group_by(month) %>% summarise(revenue = sum(`Quantity Ordered`*`Price Each`))
+
+sales_MoM$perct <- 0
+
+for (i in 2:nrow(sales_MoM)) {
+sales_MoM$perct[i] <- ((sales_MoM$revenue[i]/sales_MoM$revenue[i-1])-1)*100
+}
+
+```
+
+
+```{r}
+sales_MoM %>% mutate(id = ifelse(perct >0,1,2)) %>%
+  ggplot(aes(month,perct,fill=factor(id))) +
+  geom_bar(stat="identity")+
+  scale_fill_manual(values=c("1" = "darkgreen","2"="firebrick"))+
+  theme_minimal()+
+  theme(legend.position = "none")
+```
+
+
+## References
+
+1. https://www.youtube.com/watch?v=eMOA1pPVUc4
+2. https://www.tidyverse.org/
