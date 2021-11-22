@@ -21,6 +21,7 @@ Analyze the monthly sales data for an year and identify:
 5. Contributions of the different cities
 6. Number of unique invoices
 7. Possible time frames for promotions
+8. Explore customer buying patterns
 
 ## Key learnings
 
@@ -32,6 +33,17 @@ After conducting the EDA, one gets familiar with the following topics:
 4. Text analysis
 5. Filtering data
 6. Visualizing data with ggplot2
+
+## Key conclusions
+
+1. Monthly sales are maximum during the month of December.
+2. The average spending pattern of the customer during the month is constant and the spending amount starts to decrease at the end of the month.
+3. The average spending patter during the week is constant.
+4. During the day, the maximum sales occur either between 10 am to 2 pm or 5 to 9 pm.
+5. The ideal time for promotion during the day is when the sales are maximum (refer point 4).
+6. The overall best selling product is Macbook Pro. Also it is the best seller in each month.
+7. California was the leading revenue generator with San Francisco topping in the cities.
+8. Further analysis showed interesting insights on customer behavior pattern. More than 1000 customers who bought iPhone also bought lightening charging cable.
 
 ## Data
 
